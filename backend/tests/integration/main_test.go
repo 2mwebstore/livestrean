@@ -117,7 +117,7 @@ func setup(m *testing.M) (int, error) {
 
 func unlimited() config.RateLimits {
 	free := config.RateLimit{Every: time.Microsecond, Burst: 100000}
-	return config.RateLimits{API: free, Auth: free, Comments: free, WebSocket: free}
+	return config.RateLimits{API: free, Auth: free, Comments: free, WebSocket: free, Uploads: free}
 }
 
 // resetDatabase recreates the test database so each run starts from the
@@ -266,6 +266,27 @@ func (c *client) do(method, path string, body any) response {
 		if err := json.Unmarshal(raw, &out); err != nil {
 			c.t.Fatalf("%s %s: invalid JSON %q", method, path, raw)
 		}
+	}
+	return out
+}
+
+// raw sends a non-JSON body, e.g. an image upload.
+func (c *client) raw(method, path, contentType string, body []byte) response {
+	c.t.Helper()
+	req, err := http.NewRequest(method, api.URL+path, bytes.NewReader(body))
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	res, err := c.http.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	out := response{Status: res.StatusCode, Raw: string(raw)}
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &out)
 	}
 	return out
 }

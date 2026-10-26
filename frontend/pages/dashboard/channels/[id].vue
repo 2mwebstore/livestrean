@@ -138,6 +138,11 @@ async function remove() {
       <div class="grid gap-6 lg:grid-cols-2">
         <ObsSettingsCard :channel="channel" :regenerating="regenerating" @regenerate="regenerate" />
 
+        <div class="grid content-start gap-6">
+          <ScheduleCard :channel="channel" @updated="(c) => (channel = c)" />
+          <ThumbnailCard :channel="channel" @updated="(c) => (channel = c)" />
+        </div>
+
         <Card>
           <CardHeader>
             <CardTitle>Details</CardTitle>

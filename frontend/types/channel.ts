@@ -15,6 +15,9 @@ export interface Channel {
   live_started_at: string | null
   viewers: number
   last_live_at: string | null
+  /** Next scheduled stream (countdown), or null. */
+  scheduled_at: string | null
+  thumbnail_url: string | null
   hls_url: string
   whep_url: string
 }
@@ -30,6 +33,8 @@ export interface OwnChannel {
   live_started_at: string | null
   viewers: number
   last_live_at: string | null
+  scheduled_at: string | null
+  thumbnail_url: string | null
   created_at: string
   obs: {
     rtmp_server: string

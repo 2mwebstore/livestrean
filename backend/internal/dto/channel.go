@@ -35,6 +35,8 @@ type ChannelResponse struct {
 	LiveStartedAt *time.Time   `json:"live_started_at"`
 	Viewers       int          `json:"viewers"`
 	LastLiveAt    *time.Time   `json:"last_live_at"`
+	ScheduledAt   *time.Time   `json:"scheduled_at"`
+	ThumbnailURL  *string      `json:"thumbnail_url"`
 	HLSURL        string       `json:"hls_url"`
 	WHEPURL       string       `json:"whep_url"`
 }
@@ -57,6 +59,8 @@ type OwnChannelResponse struct {
 	LiveStartedAt *time.Time  `json:"live_started_at"`
 	Viewers       int         `json:"viewers"`
 	LastLiveAt    *time.Time  `json:"last_live_at"`
+	ScheduledAt   *time.Time  `json:"scheduled_at"`
+	ThumbnailURL  *string     `json:"thumbnail_url"`
 	CreatedAt     time.Time   `json:"created_at"`
 	OBS           OBSSettings `json:"obs"`
 }
@@ -88,4 +92,14 @@ type AdminChannelResponse struct {
 
 type UpdateStatusRequest struct {
 	Status string `json:"status" binding:"required,oneof=active disabled"`
+}
+
+// UpdateScheduleRequest sets the next stream time (RFC 3339), or clears it with null.
+type UpdateScheduleRequest struct {
+	ScheduledAt *time.Time `json:"scheduled_at"`
+}
+
+// ScheduleStatus is pushed to viewers when the schedule changes.
+type ScheduleStatus struct {
+	ScheduledAt *time.Time `json:"scheduled_at"`
 }

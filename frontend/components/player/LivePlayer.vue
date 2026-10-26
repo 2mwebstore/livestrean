@@ -10,7 +10,11 @@ const props = defineProps<{
   live: boolean
   /** Embed mode: no mode switcher below the video. */
   compact?: boolean
+  /** Image shown behind the offline message (the channel thumbnail). */
+  poster?: string | null
 }>()
+// #offline: replaces the offline message, e.g. with a countdown.
+defineSlots<{ offline?: () => unknown }>()
 
 const MODE_KEY = 'playback-mode'
 const SOUND_KEY = 'player-sound'
@@ -292,12 +296,21 @@ onBeforeUnmount(() => {
       />
       <div
         v-if="state !== 'playing'"
-        class="absolute inset-0 grid place-items-center bg-card p-6 text-center text-sm text-muted-foreground"
+        class="absolute inset-0 grid place-items-center overflow-hidden bg-card p-6 text-center text-sm text-muted-foreground"
       >
-        <div class="flex max-w-sm flex-col items-center gap-3">
-          <LoaderCircleIcon v-if="state === 'connecting'" class="size-6 animate-spin" />
-          <RadioIcon v-else class="size-6" />
-          <p>{{ overlayText }}</p>
+        <img
+          v-if="poster && state === 'offline'"
+          :src="poster"
+          alt=""
+          class="absolute inset-0 size-full object-cover opacity-35"
+        >
+        <div class="relative flex max-w-md flex-col items-center gap-3" :class="{ 'text-white': poster && state === 'offline' }">
+          <slot v-if="state === 'offline' && $slots.offline" name="offline" />
+          <template v-else>
+            <LoaderCircleIcon v-if="state === 'connecting'" class="size-6 animate-spin" />
+            <RadioIcon v-else class="size-6" />
+            <p>{{ overlayText }}</p>
+          </template>
         </div>
       </div>
       <button

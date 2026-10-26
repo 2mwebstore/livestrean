@@ -7,3 +7,4 @@ export type ChannelEvent =
   | { type: 'viewers', data: { count: number } }
   | { type: 'comment', data: Comment }
   | { type: 'comment_deleted', data: { id: number } }
+  | { type: 'schedule', data: { scheduled_at: string | null } }

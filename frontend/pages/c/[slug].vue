@@ -31,21 +31,31 @@ const socket = useChannelSocket(slug, {
 const live = computed(() => socket.status.value?.live ?? channel.value?.live ?? false)
 const startedAt = computed(() => (socket.status.value ? socket.status.value.started_at : channel.value?.live_started_at) ?? null)
 const viewers = computed(() => socket.viewers.value ?? channel.value?.viewers ?? 0)
+// The streamer can change the schedule while people watch (WebSocket event).
+const scheduledAt = computed(() => (socket.schedule.value !== undefined ? socket.schedule.value : channel.value?.scheduled_at ?? null))
 const now = useNow({ interval: 30_000 })
+const countdownAt = computed(() => (!live.value && isScheduleActive(scheduledAt.value, now.value.getTime()) ? scheduledAt.value : null))
 
+const origin = useRequestURL().origin
 useSeoMeta({
   title: () => channel.value?.title,
   description: () => channel.value?.description || `Watch ${channel.value?.owner.name} live.`,
   ogTitle: () => channel.value?.title,
   ogDescription: () => channel.value?.description || `Watch ${channel.value?.owner.name} live.`,
   ogType: 'video.other',
+  ogImage: () => (channel.value?.thumbnail_url ? origin + channel.value.thumbnail_url : undefined),
+  twitterCard: () => (channel.value?.thumbnail_url ? 'summary_large_image' : 'summary'),
 })
 </script>
 
 <template>
   <div v-if="channel" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
     <div class="min-w-0">
-      <LivePlayer :hls-url="channel.hls_url" :whep-url="channel.whep_url" :live="live" />
+      <LivePlayer :hls-url="channel.hls_url" :whep-url="channel.whep_url" :live="live" :poster="channel.thumbnail_url">
+        <template v-if="countdownAt" #offline>
+          <CountdownTimer :at="countdownAt" />
+        </template>
+      </LivePlayer>
 
       <div class="mt-5 flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
@@ -58,6 +68,7 @@ useSeoMeta({
         </div>
         <div class="flex items-center gap-3 text-sm text-muted-foreground">
           <LiveBadge :live="live" />
+          <ScheduleBadge v-if="countdownAt" :at="countdownAt" />
           <ViewerCount :count="viewers" />
           <ClientOnly>
             <span v-if="live && startedAt">Live for {{ formatDuration(startedAt, now.getTime()) }}</span>

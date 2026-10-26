@@ -45,25 +45,33 @@ func TestOriginCheck(t *testing.T) {
 	}
 }
 
-func TestRequireJSON(t *testing.T) {
+func TestBlockFormBodies(t *testing.T) {
 	post := func(contentType, body string) int {
 		req := httptest.NewRequest("POST", "/x", strings.NewReader(body))
-		req.Header.Set("Content-Type", contentType)
-		return serve(RequireJSON(), req)
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		return serve(BlockFormBodies(), req)
 	}
-	if got := post("application/json", `{}`); got != 200 {
-		t.Errorf("json: got %d", got)
+	cases := []struct {
+		contentType string
+		want        int
+	}{
+		{"application/json", 200},
+		{"application/json; charset=utf-8", 200},
+		{"image/jpeg", 200},
+		{"application/x-www-form-urlencoded", 415},
+		{"multipart/form-data; boundary=x", 415},
+		{"text/plain", 415},
+		{"text/plain; charset=utf-8", 415},
+		{"", 415},
 	}
-	if got := post("application/json; charset=utf-8", `{}`); got != 200 {
-		t.Errorf("json with charset: got %d", got)
+	for _, tc := range cases {
+		if got := post(tc.contentType, "x=1"); got != tc.want {
+			t.Errorf("%q: got %d, want %d", tc.contentType, got, tc.want)
+		}
 	}
-	if got := post("application/x-www-form-urlencoded", "a=b"); got != 415 {
-		t.Errorf("form: got %d, want 415", got)
-	}
-	if got := post("text/plain", `{}`); got != 415 {
-		t.Errorf("text/plain: got %d, want 415", got)
-	}
-	if got := serve(RequireJSON(), httptest.NewRequest("POST", "/x", nil)); got != 200 {
+	if got := serve(BlockFormBodies(), httptest.NewRequest("POST", "/x", nil)); got != 200 {
 		t.Errorf("empty body: got %d", got)
 	}
 }

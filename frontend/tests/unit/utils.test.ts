@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { apiErrorMessage, apiErrorStatus, apiFieldErrors } from '../../utils/api-error'
-import { formatCount, formatDuration, formatRelativeTime, slugify } from '../../utils/format'
+import { countdownParts, formatCount, formatDuration, formatRelativeTime, formatTimeUntil, isScheduleActive, slugify } from '../../utils/format'
 import { safeRedirect, slugError } from '../../utils/validation'
 
 const now = Date.parse('2026-01-01T12:00:00Z')
@@ -66,5 +66,26 @@ describe('api errors', () => {
     expect(apiErrorMessage({ statusCode: 500 })).toBe('Something went wrong. Please try again.')
     expect(apiErrorMessage(new Error('fetch failed'))).toMatch(/reach the server/)
     expect(apiFieldErrors(null)).toEqual({})
+  })
+})
+
+describe('countdown', () => {
+  it('splits time into days, hours, minutes and seconds', () => {
+    expect(countdownParts(((2 * 24 + 3) * 3600 + 4 * 60 + 5) * 1000)).toEqual({ days: 2, hours: 3, minutes: 4, seconds: 5 })
+    expect(countdownParts(-5000)).toEqual({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+  })
+
+  it('formats time until a stream', () => {
+    expect(formatTimeUntil('2026-01-01T12:00:30Z', now)).toBe('<1m')
+    expect(formatTimeUntil('2026-01-01T12:12:00Z', now)).toBe('12m')
+    expect(formatTimeUntil('2026-01-01T15:05:00Z', now)).toBe('3h 05m')
+    expect(formatTimeUntil('2026-01-03T15:00:00Z', now)).toBe('2d 3h')
+  })
+
+  it('keeps showing a schedule up to 2 hours late', () => {
+    expect(isScheduleActive(null, now)).toBe(false)
+    expect(isScheduleActive('2026-01-01T13:00:00Z', now)).toBe(true)
+    expect(isScheduleActive('2026-01-01T11:00:00Z', now)).toBe(true)
+    expect(isScheduleActive('2026-01-01T09:59:00Z', now)).toBe(false)
   })
 })

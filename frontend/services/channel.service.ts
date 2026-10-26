@@ -31,4 +31,19 @@ export const channelService = {
   remove(id: number) {
     return useApi()<ApiResponse<null>>(`/me/channels/${id}`, { method: 'DELETE' })
   },
+  /** Next stream time (ISO), or null to clear. */
+  setSchedule(id: number, scheduledAt: string | null) {
+    return useApi()<ApiResponse<OwnChannel>>(`/me/channels/${id}/schedule`, { method: 'PUT', body: { scheduled_at: scheduledAt } })
+  },
+  /** The image file is sent as the raw request body. */
+  uploadThumbnail(id: number, file: File) {
+    return useApi()<ApiResponse<OwnChannel>>(`/me/channels/${id}/thumbnail`, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type },
+    })
+  },
+  removeThumbnail(id: number) {
+    return useApi()<ApiResponse<OwnChannel>>(`/me/channels/${id}/thumbnail`, { method: 'DELETE' })
+  },
 }

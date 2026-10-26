@@ -7,6 +7,7 @@
 // ADMIN_PASSWORD (default: read from ../.env), SCREENSHOTS (directory, optional).
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import puppeteer from 'puppeteer-core'
@@ -101,8 +102,47 @@ try {
   await shot(sp, '1-stream-key-dialog')
   await sp.locator('button ::-p-text(I\'ve copied it)').click()
 
+  // 2b. Thumbnail and countdown, set from the channel's dashboard page.
+  const channelId = await sp.evaluate(async s => (await (await fetch('/api/v1/me/channels')).json()).data.find(c => c.slug === s).id, slug)
+  await sp.goto(`${BASE}/dashboard/channels/${channelId}`, { waitUntil: 'networkidle0' })
+  const imagePath = join(tmpdir(), `e2e-thumbnail-${run}.png`)
+  await sp.screenshot({ path: imagePath }) // any PNG will do
+  const [chooser] = await Promise.all([sp.waitForFileChooser(), sp.locator('button ::-p-text(Upload image)').click()])
+  await chooser.accept([imagePath])
+  const thumbOk = await sp.waitForSelector('img[alt="Channel thumbnail"]', { timeout: 15_000 }).then(() => true, () => false)
+  check('upload a thumbnail from the dashboard', thumbOk)
+
+  const inHalfHour = new Date(Date.now() + 30 * 60_000)
+  const pad = n => String(n).padStart(2, '0')
+  const local = `${inHalfHour.getFullYear()}-${pad(inHalfHour.getMonth() + 1)}-${pad(inHalfHour.getDate())}T${pad(inHalfHour.getHours())}:${pad(inHalfHour.getMinutes())}`
+  await sp.$eval('input[type="datetime-local"]', (el, v) => {
+    el.value = v
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  }, local)
+  await sp.locator('form button[type=submit] ::-p-text(Save)').click()
+  const scheduled = await sp.waitForFunction(() => document.body.textContent.includes('Scheduled for'), { timeout: 10_000 }).then(() => true, () => false)
+  check('schedule the next stream from the dashboard', scheduled)
+  await shot(sp, '0-dashboard-thumbnail-schedule')
+
+  const early = await (await browser.createBrowserContext()).newPage()
+  await early.setViewport({ width: 1280, height: 860 })
+  await early.goto(`${BASE}/c/${slug}`, { waitUntil: 'networkidle0' })
+  const countdown = await early.waitForSelector('[role=timer]', { timeout: 10_000 }).then(() => true, () => false)
+  check('visitor sees a countdown before the stream', countdown, await early.$eval('[role=timer]', el => el.getAttribute('aria-label')).catch(() => ''))
+  check('thumbnail shown behind the player while offline', await early.$$eval('img', imgs => imgs.some(i => i.src.includes('/thumbnail?v='))))
+  await shot(early, '0-channel-countdown')
+  await early.goto(`${BASE}/`, { waitUntil: 'networkidle0' })
+  const card = await early.$eval(`a[href="/c/${slug}"]`, a => ({ thumb: !!a.querySelector('img[src*="/thumbnail?v="]'), text: a.textContent }))
+  check('home page card shows the thumbnail and start time', card.thumb && card.text.includes('Starts in'), card.text.trim().replace(/\s+/g, ' '))
+
   // 3. Stream to it exactly like OBS would.
   stream = spawn(join(root, 'scripts/test-stream.sh'), [slug, key], { stdio: 'ignore' })
+  await early.goto(`${BASE}/c/${slug}`, { waitUntil: 'load' })
+  const replaced = await videoPlaying(early, 40_000) && !(await early.$('[role=timer]'))
+  const cleared = await early.evaluate(async s => (await (await fetch(`/api/v1/channels/${s}`)).json()).data.scheduled_at, slug)
+  check('going live replaces the countdown with video', replaced)
+  check('going live clears the schedule', cleared === null, String(cleared))
+  await early.close()
 
   // 4. A logged-in viewer and an anonymous visitor watch.
   const viewerCtx = await browser.createBrowserContext()

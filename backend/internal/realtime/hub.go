@@ -28,6 +28,7 @@ const (
 	EventViewers        = "viewers"
 	EventComment        = "comment"
 	EventCommentDeleted = "comment_deleted"
+	EventSchedule       = "schedule"
 )
 
 type Event struct {

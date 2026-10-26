@@ -124,3 +124,79 @@ func (ctl *ChannelController) Delete(c *gin.Context) {
 	}
 	utils.OK(c, http.StatusOK, "Channel deleted", nil)
 }
+
+// --- Schedule and thumbnail ---------------------------------------------------
+
+// Thumbnail serves a channel's image. With the current ?v= version the
+// response is cached for a year; uploads change the version.
+func (ctl *ChannelController) Thumbnail(c *gin.Context) {
+	thumb, version, err := ctl.channels.Thumbnail(c.Request.Context(), c.Param("slug"))
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+	etag := `"` + version + `"`
+	c.Header("ETag", etag)
+	if c.Query("v") == version {
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		c.Header("Cache-Control", "public, max-age=60")
+	}
+	if c.GetHeader("If-None-Match") == etag {
+		c.Status(http.StatusNotModified)
+		return
+	}
+	c.Data(http.StatusOK, thumb.ContentType, thumb.Data)
+}
+
+// UploadThumbnail: PUT /me/channels/:id/thumbnail with the image as the raw
+// body (Content-Type image/jpeg, image/png, image/webp or image/gif).
+func (ctl *ChannelController) UploadThumbnail(c *gin.Context) {
+	id, ok := paramID(c, "id")
+	if !ok {
+		return
+	}
+	if c.Request.ContentLength > services.MaxThumbnailBytes {
+		msg := "The image must be 5 MB or smaller"
+		utils.Fail(c, http.StatusRequestEntityTooLarge, msg, map[string]string{"thumbnail": msg})
+		return
+	}
+	body := http.MaxBytesReader(c.Writer, c.Request.Body, services.MaxThumbnailBytes+1)
+	ch, err := ctl.channels.SetThumbnail(c.Request.Context(), middleware.CurrentPrincipal(c), id, body)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+	utils.OK(c, http.StatusOK, "Thumbnail updated", ch)
+}
+
+func (ctl *ChannelController) DeleteThumbnail(c *gin.Context) {
+	id, ok := paramID(c, "id")
+	if !ok {
+		return
+	}
+	ch, err := ctl.channels.RemoveThumbnail(c.Request.Context(), middleware.CurrentPrincipal(c), id)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+	utils.OK(c, http.StatusOK, "Thumbnail removed", ch)
+}
+
+// UpdateSchedule: PUT /me/channels/:id/schedule {"scheduled_at": "2026-11-01T13:00:00Z" | null}
+func (ctl *ChannelController) UpdateSchedule(c *gin.Context) {
+	id, ok := paramID(c, "id")
+	if !ok {
+		return
+	}
+	var req dto.UpdateScheduleRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	ch, err := ctl.channels.SetSchedule(c.Request.Context(), middleware.CurrentPrincipal(c), id, req.ScheduledAt)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+	utils.OK(c, http.StatusOK, "Schedule updated", ch)
+}

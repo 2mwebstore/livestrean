@@ -17,6 +17,8 @@ interface Handlers {
 export function useChannelSocket(slug: string, handlers: Handlers = {}) {
   const status = ref<LiveStatus | null>(null)
   const viewers = ref<number | null>(null)
+  /** undefined until the streamer changes the schedule; then the new value. */
+  const schedule = ref<string | null | undefined>(undefined)
   const connected = ref(false)
 
   let socket: WebSocket | null = null
@@ -58,6 +60,9 @@ export function useChannelSocket(slug: string, handlers: Handlers = {}) {
         case 'comment_deleted':
           handlers.onCommentDeleted?.(event.data.id)
           break
+        case 'schedule':
+          schedule.value = event.data.scheduled_at
+          break
       }
     }
 
@@ -77,5 +82,5 @@ export function useChannelSocket(slug: string, handlers: Handlers = {}) {
     socket?.close()
   })
 
-  return { status, viewers, connected }
+  return { status, viewers, schedule, connected }
 }

@@ -93,11 +93,24 @@ func (s *LiveService) Poll(ctx context.Context) {
 	}
 }
 
+// scheduleGrace: going live this long before a scheduled time counts as
+// starting that scheduled stream, so its countdown is cleared.
+const scheduleGrace = time.Hour
+
 func (s *LiveService) changed(ctx context.Context, slug string, state LiveState) {
 	s.log.Info("channel live status changed", "channel", slug, "live", state.Live)
 	s.hub.Broadcast(slug, realtime.Event{Type: realtime.EventStatus, Data: dto.LiveStatus{Live: state.Live, StartedAt: state.StartedAt}})
-	if err := s.channels.TouchLastLive(ctx, slug, time.Now().UTC()); err != nil {
+	now := time.Now().UTC()
+	if err := s.channels.TouchLastLive(ctx, slug, now); err != nil {
 		s.log.Error("update last_live_at", "channel", slug, "error", err)
+	}
+	if state.Live {
+		cleared, err := s.channels.ClearScheduleBefore(ctx, slug, now.Add(scheduleGrace))
+		if err != nil {
+			s.log.Error("clear schedule", "channel", slug, "error", err)
+		} else if cleared {
+			s.hub.Broadcast(slug, realtime.Event{Type: realtime.EventSchedule, Data: dto.ScheduleStatus{}})
+		}
 	}
 }
 

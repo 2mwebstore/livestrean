@@ -42,14 +42,17 @@ func OriginCheck(allowed []string) gin.HandlerFunc {
 	}
 }
 
-// RequireJSON rejects non-JSON bodies, so plain HTML forms on other sites
-// can't submit to the API.
-func RequireJSON() gin.HandlerFunc {
+// BlockFormBodies rejects the body types an HTML form on another site can
+// send (urlencoded, multipart, text/plain, or none). Any other type, like
+// JSON or an image upload, needs a CORS preflight the API never approves,
+// so other sites can't send it. Part of the CSRF protection.
+func BlockFormBodies() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !isSafeMethod(c.Request.Method) && c.Request.ContentLength != 0 {
 			mediaType, _, _ := mime.ParseMediaType(c.GetHeader("Content-Type"))
-			if mediaType != "application/json" {
-				utils.Abort(c, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+			switch mediaType {
+			case "", "application/x-www-form-urlencoded", "multipart/form-data", "text/plain":
+				utils.Abort(c, http.StatusUnsupportedMediaType, "Send JSON, or an image for uploads")
 				return
 			}
 		}

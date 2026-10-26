@@ -87,6 +87,7 @@ func New(ctx context.Context, cfg *config.Config, db *gorm.DB, log *slog.Logger)
 		Auth:      mw.NewRateLimiter(rl.Auth.Every, rl.Auth.Burst),
 		Comments:  mw.NewRateLimiter(rl.Comments.Every, rl.Comments.Burst),
 		WebSocket: mw.NewRateLimiter(rl.WebSocket.Every, rl.WebSocket.Burst),
+		Uploads:   mw.NewRateLimiter(rl.Uploads.Every, rl.Uploads.Burst),
 	}
 
 	// Public router
@@ -102,7 +103,7 @@ func New(ctx context.Context, cfg *config.Config, db *gorm.DB, log *slog.Logger)
 		mw.Recovery(log),
 		mw.SecurityHeaders(),
 		mw.OriginCheck(cfg.AllowedOrigins),
-		mw.RequireJSON(),
+		mw.BlockFormBodies(),
 	)
 	router.NoRoute(func(c *gin.Context) { utils.Fail(c, http.StatusNotFound, "Not found", nil) })
 	routes.RegisterPublic(router, ctls, limits, mw.LoadPrincipal(authSvc, cfg.SessionCookie, log))
@@ -135,7 +136,7 @@ func (a *App) EnsureAdmin(ctx context.Context) error {
 func (a *App) StartBackground(ctx context.Context) {
 	go a.hub.Run(ctx)
 	go a.live.Run(ctx, 2*time.Second)
-	for _, rl := range []*mw.RateLimiter{a.limits.API, a.limits.Auth, a.limits.Comments, a.limits.WebSocket} {
+	for _, rl := range []*mw.RateLimiter{a.limits.API, a.limits.Auth, a.limits.Comments, a.limits.WebSocket, a.limits.Uploads} {
 		go rl.Cleanup(ctx)
 	}
 	go func() {

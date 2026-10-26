@@ -9,6 +9,10 @@ channels; viewers watch in the browser and chat.
 - **Live chat.** Anyone can read it; only logged-in users can post. Channel
   owners and admins can delete messages.
 - **Live viewer count**, pushed in real time over WebSocket.
+- **Thumbnails** per channel, shown on cards, behind the offline player and
+  in link previews.
+- **Countdown:** schedule the next stream and viewers see a live countdown
+  that turns into the video when you go live.
 - **Two playback modes:** Standard (HLS, ~2–4 s delay, works everywhere) and
   Low latency (WebRTC, under 1 s).
 - **Embeds:** put any channel's player on another website with an `<iframe>`.

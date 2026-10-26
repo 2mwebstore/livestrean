@@ -87,12 +87,16 @@ async function create(values: ChannelFormValues) {
     <div v-else class="grid gap-3">
       <Card v-for="ch in channels" :key="ch.id">
         <CardContent class="flex flex-wrap items-center gap-4">
+          <div class="relative hidden aspect-video w-28 shrink-0 overflow-hidden rounded-md bg-muted sm:block">
+            <img v-if="ch.thumbnail_url" :src="ch.thumbnail_url" alt="" class="size-full object-cover">
+          </div>
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
               <p class="truncate font-medium">
                 {{ ch.title }}
               </p>
               <LiveBadge :live="ch.live" />
+              <ScheduleBadge v-if="!ch.live && isScheduleActive(ch.scheduled_at)" :at="ch.scheduled_at" />
               <Badge v-if="ch.status !== 'active'" variant="destructive">
                 Disabled by admin
               </Badge>

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
+	"time"
 
 	"livestream/internal/auth"
 	"livestream/internal/dto"
@@ -210,6 +212,94 @@ func (s *ChannelService) findOwned(ctx context.Context, p *auth.Principal, id ui
 	return ch, nil
 }
 
+// --- Schedule and thumbnail -------------------------------------------------------
+
+// maxScheduleAhead is how far ahead a stream can be scheduled.
+const maxScheduleAhead = 366 * 24 * time.Hour
+
+// SetSchedule sets (or with nil, clears) the next stream time. Viewers
+// watching the channel see the countdown change immediately.
+func (s *ChannelService) SetSchedule(ctx context.Context, p *auth.Principal, id uint64, at *time.Time) (*dto.OwnChannelResponse, error) {
+	ch, err := s.findOwned(ctx, p, id)
+	if err != nil {
+		return nil, err
+	}
+	if at != nil {
+		t := at.UTC().Truncate(time.Second)
+		now := time.Now().UTC()
+		if !t.After(now) {
+			return nil, validationError("scheduled_at", "Pick a time in the future")
+		}
+		if t.After(now.Add(maxScheduleAhead)) {
+			return nil, validationError("scheduled_at", "Pick a time within the next year")
+		}
+		at = &t
+	}
+	if err := s.channels.UpdateSchedule(ctx, ch.ID, at); err != nil {
+		return nil, err
+	}
+	ch.ScheduledAt = at
+	s.hub.Broadcast(ch.Slug, realtime.Event{Type: realtime.EventSchedule, Data: dto.ScheduleStatus{ScheduledAt: at}})
+	resp := s.toOwn(ch)
+	return &resp, nil
+}
+
+func (s *ChannelService) SetThumbnail(ctx context.Context, p *auth.Principal, id uint64, upload io.Reader) (*dto.OwnChannelResponse, error) {
+	ch, err := s.findOwned(ctx, p, id)
+	if err != nil {
+		return nil, err
+	}
+	data, version, err := processThumbnail(upload)
+	if err != nil {
+		return nil, err
+	}
+	thumb := &models.ChannelThumbnail{ContentType: "image/jpeg", Data: data, UpdatedAt: time.Now().UTC()}
+	if err := s.channels.SaveThumbnail(ctx, ch.ID, version, thumb); err != nil {
+		return nil, err
+	}
+	ch.ThumbnailVersion = &version
+	resp := s.toOwn(ch)
+	return &resp, nil
+}
+
+func (s *ChannelService) RemoveThumbnail(ctx context.Context, p *auth.Principal, id uint64) (*dto.OwnChannelResponse, error) {
+	ch, err := s.findOwned(ctx, p, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.channels.DeleteThumbnail(ctx, ch.ID); err != nil {
+		return nil, err
+	}
+	ch.ThumbnailVersion = nil
+	resp := s.toOwn(ch)
+	return &resp, nil
+}
+
+// Thumbnail returns a public channel's image and its current version.
+func (s *ChannelService) Thumbnail(ctx context.Context, slug string) (*models.ChannelThumbnail, string, error) {
+	ch, err := s.channels.FindBySlug(ctx, slug)
+	if errors.Is(err, repositories.ErrNotFound) || (err == nil && (!policies.IsPublic(ch) || ch.ThumbnailVersion == nil)) {
+		return nil, "", notFound("No thumbnail")
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	thumb, err := s.channels.FindThumbnail(ctx, ch.ID)
+	if errors.Is(err, repositories.ErrNotFound) {
+		return nil, "", notFound("No thumbnail")
+	}
+	return thumb, *ch.ThumbnailVersion, err
+}
+
+// thumbnailURL includes the version, so browsers can cache each image forever.
+func thumbnailURL(ch *models.Channel) *string {
+	if ch.ThumbnailVersion == nil {
+		return nil
+	}
+	u := "/api/v1/channels/" + ch.Slug + "/thumbnail?v=" + *ch.ThumbnailVersion
+	return &u
+}
+
 // --- Admin ----------------------------------------------------------------------
 
 func (s *ChannelService) ListAll(ctx context.Context, query string, page, limit int) ([]dto.AdminChannelResponse, int64, error) {
@@ -276,6 +366,8 @@ func (s *ChannelService) toPublic(ch *models.Channel) dto.ChannelResponse {
 		LiveStartedAt: state.StartedAt,
 		Viewers:       s.hub.ViewerCount(ch.Slug),
 		LastLiveAt:    ch.LastLiveAt,
+		ScheduledAt:   ch.ScheduledAt,
+		ThumbnailURL:  thumbnailURL(ch),
 		HLSURL:        s.settings.HLSBase + "/" + path + "/index.m3u8",
 		WHEPURL:       s.settings.WHEPBase + "/" + path + "/whep",
 	}
@@ -293,6 +385,8 @@ func (s *ChannelService) toOwn(ch *models.Channel) dto.OwnChannelResponse {
 		LiveStartedAt: state.StartedAt,
 		Viewers:       s.hub.ViewerCount(ch.Slug),
 		LastLiveAt:    ch.LastLiveAt,
+		ScheduledAt:   ch.ScheduledAt,
+		ThumbnailURL:  thumbnailURL(ch),
 		CreatedAt:     ch.CreatedAt,
 		OBS: dto.OBSSettings{
 			RTMPServer: s.settings.RTMPURL,

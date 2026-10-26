@@ -24,6 +24,7 @@ type Limits struct {
 	Auth      *mw.RateLimiter
 	Comments  *mw.RateLimiter
 	WebSocket *mw.RateLimiter
+	Uploads   *mw.RateLimiter
 }
 
 // RegisterPublic: the API served through the reverse proxy.
@@ -46,6 +47,7 @@ func RegisterPublic(r *gin.Engine, c Controllers, l Limits, loadPrincipal gin.Ha
 	// Public channels and chat (reading is open; posting needs a login)
 	api.GET("/channels", c.Channels.List)
 	api.GET("/channels/:slug", c.Channels.Get)
+	api.GET("/channels/:slug/thumbnail", c.Channels.Thumbnail)
 	api.GET("/channels/:slug/comments", c.Comments.List)
 	api.POST("/channels/:slug/comments", requireAuth, can(auth.PermCommentsCreate), mw.RateLimitByUser(l.Comments), c.Comments.Create)
 	api.DELETE("/comments/:id", requireAuth, c.Comments.Delete) // policy checked in the service
@@ -58,6 +60,9 @@ func RegisterPublic(r *gin.Engine, c Controllers, l Limits, loadPrincipal gin.Ha
 	me.PUT("/:id", can(auth.PermChannelsManageOwn), c.Channels.Update)
 	me.POST("/:id/stream-key", can(auth.PermChannelsManageOwn), c.Channels.RegenerateKey)
 	me.DELETE("/:id", can(auth.PermChannelsManageOwn), c.Channels.Delete)
+	me.PUT("/:id/schedule", can(auth.PermChannelsManageOwn), c.Channels.UpdateSchedule)
+	me.PUT("/:id/thumbnail", can(auth.PermChannelsManageOwn), mw.RateLimitByUser(l.Uploads), c.Channels.UploadThumbnail)
+	me.DELETE("/:id/thumbnail", can(auth.PermChannelsManageOwn), c.Channels.DeleteThumbnail)
 
 	// Admin
 	admin := api.Group("/admin", requireAuth)

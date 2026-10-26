@@ -5,6 +5,7 @@ const props = defineProps<{ channel: Channel }>()
 
 // A stable color per channel for the placeholder thumbnail.
 const hue = computed(() => [...props.channel.slug].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7))
+const upcoming = computed(() => !props.channel.live && isScheduleActive(props.channel.scheduled_at))
 </script>
 
 <template>
@@ -13,7 +14,14 @@ const hue = computed(() => [...props.channel.slug].reduce((h, c) => (h * 31 + c.
       class="relative aspect-video overflow-hidden rounded-xl ring-offset-background transition group-hover:ring-2 group-hover:ring-ring group-focus-visible:ring-2 group-focus-visible:ring-ring"
       :style="{ background: `linear-gradient(135deg, oklch(0.35 0.08 ${hue}), oklch(0.2 0.04 ${hue + 40}))` }"
     >
-      <span class="absolute inset-0 grid place-items-center text-5xl font-bold text-white/25 uppercase select-none">
+      <img
+        v-if="channel.thumbnail_url"
+        :src="channel.thumbnail_url"
+        alt=""
+        loading="lazy"
+        class="absolute inset-0 size-full object-cover"
+      >
+      <span v-else class="absolute inset-0 grid place-items-center text-5xl font-bold text-white/25 uppercase select-none">
         {{ channel.title.charAt(0) }}
       </span>
       <div class="absolute top-2 left-2">
@@ -22,6 +30,9 @@ const hue = computed(() => [...props.channel.slug].reduce((h, c) => (h * 31 + c.
       <div v-if="channel.live" class="absolute bottom-2 left-2 rounded-md bg-black/70 px-1.5 py-0.5 text-xs text-white">
         <ViewerCount :count="channel.viewers" />
       </div>
+      <div v-else-if="upcoming && channel.scheduled_at" class="absolute bottom-2 left-2">
+        <ScheduleBadge :at="channel.scheduled_at" />
+      </div>
     </div>
     <div class="mt-2.5 min-w-0">
       <p class="truncate font-medium group-hover:underline">
@@ -29,7 +40,7 @@ const hue = computed(() => [...props.channel.slug].reduce((h, c) => (h * 31 + c.
       </p>
       <p class="truncate text-sm text-muted-foreground">
         {{ channel.owner.name }}
-        <template v-if="!channel.live && channel.last_live_at">
+        <template v-if="!channel.live && !upcoming && channel.last_live_at">
           · live {{ formatRelativeTime(channel.last_live_at) }}
         </template>
       </p>

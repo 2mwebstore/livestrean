@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useNow } from '@vueuse/core'
 import { ExternalLinkIcon } from '@lucide/vue'
 import { channelService } from '~/services/channel.service'
 
@@ -13,6 +14,9 @@ const { data: channel } = await useAsyncData(`channel:${slug}`, () => channelSer
 const socket = useChannelSocket(slug)
 const live = computed(() => socket.status.value?.live ?? channel.value?.live ?? false)
 const viewers = computed(() => socket.viewers.value ?? channel.value?.viewers ?? 0)
+const scheduledAt = computed(() => (socket.schedule.value !== undefined ? socket.schedule.value : channel.value?.scheduled_at ?? null))
+const now = useNow({ interval: 30_000 })
+const countdownAt = computed(() => (!live.value && isScheduleActive(scheduledAt.value, now.value.getTime()) ? scheduledAt.value : null))
 
 useHead({
   title: () => channel.value?.title ?? 'Channel unavailable',
@@ -22,7 +26,11 @@ useHead({
 
 <template>
   <div v-if="channel" class="relative">
-    <LivePlayer :hls-url="channel.hls_url" :whep-url="channel.whep_url" :live="live" compact />
+    <LivePlayer :hls-url="channel.hls_url" :whep-url="channel.whep_url" :live="live" :poster="channel.thumbnail_url" compact>
+      <template v-if="countdownAt" #offline>
+        <CountdownTimer :at="countdownAt" compact />
+      </template>
+    </LivePlayer>
     <div class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2">
       <div class="flex items-center gap-2 text-xs text-white">
         <LiveBadge :live="live" />

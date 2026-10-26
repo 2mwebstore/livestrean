@@ -64,6 +64,7 @@ type RateLimits struct {
 	Auth      RateLimit // per IP, login and register
 	Comments  RateLimit // per user, posting chat messages
 	WebSocket RateLimit // per IP, opening WebSocket connections
+	Uploads   RateLimit // per user, thumbnail uploads
 }
 
 func DefaultRateLimits() RateLimits {
@@ -72,6 +73,7 @@ func DefaultRateLimits() RateLimits {
 		Auth:      RateLimit{Every: 12 * time.Second, Burst: 5},
 		Comments:  RateLimit{Every: time.Second, Burst: 3},
 		WebSocket: RateLimit{Every: 2 * time.Second, Burst: 10},
+		Uploads:   RateLimit{Every: 10 * time.Second, Burst: 5},
 	}
 }
 

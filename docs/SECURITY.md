@@ -55,8 +55,13 @@ body are ignored. Repositories update explicit columns only.
 ## Web protections
 
 - **CSRF:** `SameSite=Lax` cookies, plus the API rejects state-changing
-  requests whose `Origin` isn't `APP_URL` (403) and any non-JSON body (415),
-  which HTML forms can't send.
+  requests whose `Origin` isn't `APP_URL` (403) and any body an HTML form can
+  send: urlencoded, multipart or text/plain (415). JSON and image uploads
+  need a CORS preflight the API never approves.
+- **Uploads:** thumbnails are size-limited (5 MB, 40 megapixels), decoded,
+  cropped and re-encoded as JPEG before storing, so metadata (EXIF/GPS) and
+  anything hidden in the file is dropped. Served as `image/jpeg` with
+  `nosniff`.
 - **XSS:** chat and all user text render through Vue interpolation (escaped);
   no `v-html`. Comment bodies are stripped of control characters.
 - **WebSocket:** origin-checked, receive-only, 512-byte read limit, 10

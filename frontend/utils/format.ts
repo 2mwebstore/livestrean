@@ -45,9 +45,57 @@ export function slugify(text: string): string {
   return text
     .toLowerCase()
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036F]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40)
     .replace(/-+$/g, '')
+}
+
+export interface CountdownParts {
+  days: number
+  hours: number
+  minutes: number
+  seconds: number
+}
+
+export function countdownParts(ms: number): CountdownParts {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  return {
+    days: Math.floor(total / 86_400),
+    hours: Math.floor((total % 86_400) / 3600),
+    minutes: Math.floor((total % 3600) / 60),
+    seconds: total % 60,
+  }
+}
+
+/** "2d 3h", "3h 05m", "12m", "<1m" until an ISO time. */
+export function formatTimeUntil(iso: string, now = Date.now()): string {
+  const ms = Date.parse(iso) - now
+  if (ms < MINUTE) return '<1m'
+  const { days, hours, minutes } = countdownParts(ms)
+  if (days) return `${days}d ${hours}h`
+  if (hours) return `${hours}h ${String(minutes).padStart(2, '0')}m`
+  return `${minutes}m`
+}
+
+/** "Sat, 1 Nov, 20:00" in the viewer's time zone. */
+export function formatScheduleDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+/** How long after the scheduled time "Starting soon" keeps showing. */
+const SCHEDULE_GRACE = 2 * HOUR
+
+/** A schedule worth showing: upcoming, or less than 2 hours late. */
+export function isScheduleActive(iso: string | null | undefined, now = Date.now()): iso is string {
+  return !!iso && Date.parse(iso) + SCHEDULE_GRACE > now
+}
+
+/** ISO time → value for <input type="datetime-local">, in local time. */
+export function toDateTimeLocal(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
