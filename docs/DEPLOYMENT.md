@@ -1,8 +1,14 @@
 # Deployment
 
-One Linux server with Docker runs everything, for example a DigitalOcean
-Droplet with 2 vCPU / 4 GB. Video goes through the server, so bandwidth is
-the main cost: roughly stream bitrate × viewers.
+Two ways to run it:
+
+- **A Linux server with Docker** (below), e.g. a DigitalOcean Droplet with
+  2 vCPU / 4 GB. Everything works, including Low latency (WebRTC).
+- **Railway** (see [Railway](#railway) at the end). Quick to set up, but
+  Railway has no UDP, so only RTMP streaming and Standard (HLS) playback work.
+
+Video goes through your server either way, so bandwidth is the main cost:
+roughly stream bitrate × viewers.
 
 ## 1. Server
 
@@ -22,7 +28,9 @@ cp .env.example .env
 
 Cloudflare's proxy only carries HTTP(S). RTMP (1935) and WebRTC media (UDP
 8189) must reach the server directly, so OBS uses the DNS-only name. If you
-use the Cloudflare proxy, set SSL/TLS mode to **Full (strict)**.
+use the Cloudflare proxy, set SSL/TLS mode to **Full (strict)**, and set
+`TRUSTED_PROXIES` to Cloudflare's IP ranges and `CLIENT_IP_HEADERS=CF-Connecting-IP`
+so the app sees visitors' real IPs (see `.env.example`).
 
 ## 3. `.env` for production
 
@@ -107,3 +115,66 @@ Copy backups off the server, for example to DigitalOcean Spaces.
   or move MediaMTX to its own server.
 - **More API instances:** move rate limits and WebSocket broadcasting to a
   shared store such as Redis first (see ARCHITECTURE.md).
+
+## Railway
+
+Each part runs as its own Railway service, talking over Railway's private
+network (`<service>.railway.internal`).
+
+| Service | Source | Public access |
+|---|---|---|
+| `MySQL` | Railway MySQL database | none |
+| `backend` | `backend/` | none (reached through `web`) |
+| `frontend` | `frontend/` | none (reached through `web`) |
+| `mediamtx` | `mediamtx/` | TCP proxy → port 1935, the RTMP address for OBS |
+| `web` | `caddy/` | domain → port 8080, the site everyone opens |
+
+### What works on Railway
+
+Railway has no UDP, so WebRTC can't carry video:
+
+- OBS must stream over **RTMP**; WHIP doesn't work.
+- Viewers get **Standard (HLS)** playback. Choosing Low latency falls back to
+  Standard automatically.
+- The RTMP address is Railway's TCP proxy (`rtmp://<host>.proxy.rlwy.net:<port>/live`),
+  not port 1935. The dashboard shows the right one.
+
+### Set up
+
+```sh
+railway init --name livestream
+railway add --database mysql
+for s in backend frontend mediamtx web; do railway add --service $s; done
+railway domain --service web --port 8080                  # → https://web-….up.railway.app
+railway tcp-proxy create --service mediamtx --port 1935   # → host:port for OBS
+```
+
+Variables (`railway variable set --service <name> KEY=value …`):
+
+| Service | Variables |
+|---|---|
+| `backend` | `APP_ENV=production`, `APP_URL=https://<web domain>`, `DB_HOST=${{MySQL.MYSQLHOST}}`, `DB_PORT=${{MySQL.MYSQLPORT}}`, `DB_NAME=${{MySQL.MYSQLDATABASE}}`, `DB_USER=${{MySQL.MYSQLUSER}}`, `DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}`, `MEDIAMTX_API=http://mediamtx.railway.internal:9997`, `PUBLIC_RTMP_URL=rtmp://<tcp proxy host:port>/live`, `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
+| `frontend` | `NUXT_API_INTERNAL_BASE=http://backend.railway.internal:8080/api/v1`, `HOST=::`, `PORT=3000` |
+| `mediamtx` | `MTX_AUTHHTTPADDRESS=http://backend.railway.internal:8081/mediamtx/auth` |
+| `web` | `SITE_ADDRESS=:8080`, `PORT=8080`, `BACKEND_UPSTREAM=backend.railway.internal:8080`, `FRONTEND_UPSTREAM=frontend.railway.internal:3000`, `MEDIAMTX_HLS_UPSTREAM=mediamtx.railway.internal:8888`, `MEDIAMTX_WEBRTC_UPSTREAM=mediamtx.railway.internal:8889`, `TRUSTED_PROXIES=100.64.0.0/10`, `CLIENT_IP_HEADERS=X-Real-IP` |
+
+Quote values containing `${{…}}` in single quotes so your shell leaves them alone.
+
+The last two `web` variables let rate limits and audit logs see each
+visitor's real IP. Railway's proxy connects from `100.64.0.0/10` and
+replaces `X-Real-IP` with the real client address, so visitors can't fake
+it. Without them every visitor appears as Railway's proxy and shares one
+rate limit.
+
+### Deploy
+
+```sh
+railway up backend  --path-as-root --service backend
+railway up frontend --path-as-root --service frontend
+railway up mediamtx --path-as-root --service mediamtx
+railway up caddy    --path-as-root --service web
+```
+
+To deploy automatically on every `git push`, connect each service to the
+GitHub repo in its Railway settings and set its **Root Directory**
+(`backend`, `frontend`, `mediamtx`, `caddy`).

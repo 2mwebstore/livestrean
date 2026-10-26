@@ -4,14 +4,16 @@
 # SITE_ADDRESS: ":80" locally, a domain name in production (automatic HTTPS),
 # or ":<port>" behind a platform proxy such as Railway.
 # *_UPSTREAM: where each service is reachable (Docker Compose names by default).
+# The backend and frontend get the visitor's IP in X-Real-IP.
 {
 	admin off
 	servers {
-		# Proxies in front of Caddy (e.g. Railway's edge) whose X-Forwarded-For
-		# can be trusted. Strict mode reads it right to left, so a client can't
-		# spoof its IP by sending its own header.
-		trusted_proxies static {$TRUSTED_PROXIES:private_ranges}
+		# Proxies in front of Caddy whose client-IP header may be believed, e.g.
+		# a platform edge such as Railway's. Default: none, because Caddy faces
+		# the internet directly and anyone could send a fake header.
+		trusted_proxies static {$TRUSTED_PROXIES:127.0.0.1/32}
 		trusted_proxies_strict
+		client_ip_headers {$CLIENT_IP_HEADERS:X-Forwarded-For}
 	}
 }
 
@@ -28,17 +30,23 @@
 	}
 
 	handle /api/* {
-		reverse_proxy {$BACKEND_UPSTREAM:backend:8080}
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8080} {
+			header_up X-Real-IP {client_ip}
+		}
 	}
 
 	handle /ws/* {
-		reverse_proxy {$BACKEND_UPSTREAM:backend:8080}
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8080} {
+			header_up X-Real-IP {client_ip}
+		}
 	}
 
 	# Everything else is the Nuxt website
 	handle {
 		encode zstd gzip
-		reverse_proxy {$FRONTEND_UPSTREAM:frontend:3000}
+		reverse_proxy {$FRONTEND_UPSTREAM:frontend:3000} {
+			header_up X-Real-IP {client_ip}
+		}
 	}
 
 	header {

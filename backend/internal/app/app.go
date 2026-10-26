@@ -94,6 +94,8 @@ func New(ctx context.Context, cfg *config.Config, db *gorm.DB, log *slog.Logger)
 	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		return nil, err
 	}
+	// Caddy sends the visitor's IP in X-Real-IP; only believed from trusted proxies.
+	router.RemoteIPHeaders = []string{"X-Real-IP", "X-Forwarded-For"}
 	router.Use(
 		mw.RequestID(),
 		mw.RequestLogger(log),

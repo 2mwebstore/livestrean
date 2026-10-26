@@ -88,6 +88,12 @@ node frontend/tests/e2e/full-flow.mjs
 CI runs the backend and frontend checks on every push
 (`.github/workflows/ci.yml`).
 
+## Deploy
+
+On your own server or on Railway: see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+On Railway only RTMP streaming and Standard (HLS) playback work, because
+Railway has no UDP for WebRTC.
+
 ## Project layout
 
 ```

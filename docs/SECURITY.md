@@ -61,6 +61,11 @@ body are ignored. Repositories update explicit columns only.
   no `v-html`. Comment bodies are stripped of control characters.
 - **WebSocket:** origin-checked, receive-only, 512-byte read limit, 10
   connections per IP, slow clients are dropped.
+- **Visitor IP:** Caddy decides the client IP. It only believes a client-IP
+  header from proxies listed in `TRUSTED_PROXIES` (default: none), then
+  passes the result to the backend and frontend in `X-Real-IP`, overwriting
+  anything the visitor sent. The backend only reads that header from its
+  private-network proxies. Rate limits and audit logs depend on this.
 - **Open redirects:** `?redirect=` only accepts same-site paths.
 - **Headers:** `X-Content-Type-Options`, `Referrer-Policy`, and
   `X-Frame-Options: SAMEORIGIN` on everything except `/embed/*`.

@@ -5,7 +5,7 @@ export default defineNuxtPlugin(() => {
   // During SSR, call the API directly and pass along the visitor's cookie
   // and IP, so the API sees the same user and rate-limits the right address.
   const headers = import.meta.server
-    ? useRequestHeaders(['cookie', 'x-forwarded-for', 'user-agent'])
+    ? useRequestHeaders(['cookie', 'x-real-ip', 'user-agent'])
     : undefined
 
   const api = $fetch.create({
