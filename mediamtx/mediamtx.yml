@@ -1,0 +1,43 @@
+# MediaMTX config. Anything not set here uses MediaMTX's defaults.
+# Full reference: https://github.com/bluenviron/mediamtx/blob/v1.21.2/mediamtx.yml
+
+logLevel: info
+
+# Every publish/read attempt is checked by the backend: stream keys are
+# per channel and stored (hashed) in the database.
+authMethod: http
+authHTTPAddress: http://backend:8081/mediamtx/auth
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
+
+# Control API, used by the backend for live status and to disconnect
+# streams. Only reachable inside the Docker network.
+api: true
+apiAddress: :9997
+
+# Unused protocols.
+rtsp: false
+srt: false
+moq: false
+
+rtmp: true
+rtmpAddress: :1935
+
+# HLS and WebRTC HTTP are reached through Caddy (see caddy/Caddyfile).
+hls: true
+hlsAddress: :8888
+hlsVariant: lowLatency
+hlsAlwaysRemux: true
+hlsTrustedProxies: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+
+webrtc: true
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcTrustedProxies: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+# webrtcAdditionalHosts is set from PUBLIC_HOST in docker-compose.yml.
+
+paths:
+  all_others:

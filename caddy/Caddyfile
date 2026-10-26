@@ -1,0 +1,43 @@
+# Single entry point: website, API, WebSocket and video all share one origin,
+# so the session cookie works everywhere and no CORS is needed.
+# SITE_ADDRESS=":80" locally; a domain name in production (automatic HTTPS).
+{
+	admin off
+}
+
+{$SITE_ADDRESS::80} {
+	# WebRTC signalling: OBS WHIP publish and browser WHEP playback
+	@webrtc path_regexp ^/live/[^/]+/(whip|whep)(/.*)?$
+	handle @webrtc {
+		reverse_proxy mediamtx:8889
+	}
+
+	# HLS playlists and segments
+	handle /live/* {
+		reverse_proxy mediamtx:8888
+	}
+
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	handle /ws/* {
+		reverse_proxy backend:8080
+	}
+
+	# Everything else is the Nuxt website
+	handle {
+		encode zstd gzip
+		reverse_proxy frontend:3000
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Only /embed/* pages may be shown inside other websites' iframes.
+	@notEmbed not path /embed/*
+	header @notEmbed X-Frame-Options SAMEORIGIN
+}

@@ -1,0 +1,104 @@
+name: livestream
+
+services:
+  # Single public entry point (see caddy/Caddyfile).
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [frontend, backend, mediamtx]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # Nuxt website (SSR).
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on: [backend]
+    environment:
+      NUXT_API_INTERNAL_BASE: http://backend:8080/api/v1
+
+  # Go API. Port 8081 (MediaMTX auth hook) is only used inside this network.
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      DB_HOST: mysql
+      DB_NAME: ${DB_NAME:-livestream}
+      DB_USER: ${DB_USER:-livestream}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MEDIAMTX_API: http://mediamtx:9997
+      PUBLIC_RTMP_URL: ${PUBLIC_RTMP_URL:-rtmp://localhost/live}
+      MAX_CHANNELS_PER_USER: ${MAX_CHANNELS_PER_USER:-5}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-livestream}
+      MYSQL_USER: ${DB_USER:-livestream}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # Media server: receives OBS streams, serves HLS/WebRTC.
+  mediamtx:
+    image: bluenviron/mediamtx:1.21.2
+    restart: unless-stopped
+    depends_on: [backend]
+    environment:
+      # Addresses viewers use to reach this machine over WebRTC.
+      MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_HOST:-127.0.0.1}
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "1935:1935"      # RTMP from OBS
+      - "8189:8189/udp"  # WebRTC media
+      - "8189:8189/tcp"  # WebRTC media, TCP fallback
+
+  # Backend tests against a throwaway database:
+  #   docker compose --profile test run --rm backend-test
+  backend-test:
+    profiles: ["test"]
+    image: golang:1.27-alpine
+    working_dir: /src
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      CGO_ENABLED: "0"
+      TEST_DB_HOST: mysql
+      TEST_DB_NAME: ${DB_NAME:-livestream}_test
+      TEST_DB_USER: root
+      TEST_DB_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - ./backend:/src
+      - go_cache:/go
+    command: ["go", "test", "-count=1", "./..."]
+
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:
+  go_cache:

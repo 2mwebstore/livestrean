@@ -1,0 +1,27 @@
+// Package dto defines the API contract: request bodies and response shapes.
+package dto
+
+import "livestream/internal/auth"
+
+type RegisterRequest struct {
+	Name     string `json:"name" binding:"required,min=2,max=80"`
+	Email    string `json:"email" binding:"required,email,max=191"`
+	Password string `json:"password" binding:"required,min=8,max=72"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required,email,max=191"`
+	Password string `json:"password" binding:"required,max=72"`
+}
+
+type UserResponse struct {
+	ID          uint64   `json:"id"`
+	Name        string   `json:"name"`
+	Email       string   `json:"email"`
+	Role        string   `json:"role"`
+	Permissions []string `json:"permissions"`
+}
+
+func NewUserResponse(p *auth.Principal) UserResponse {
+	return UserResponse{ID: p.UserID, Name: p.Name, Email: p.Email, Role: p.Role, Permissions: p.Permissions()}
+}
