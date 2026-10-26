@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -24,7 +25,11 @@ func NewChannelController(channels *services.ChannelService) *ChannelController 
 
 func (ctl *ChannelController) List(c *gin.Context) {
 	pg := utils.ParsePagination(c, 24, 100)
-	items, total, err := ctl.channels.ListPublic(c.Request.Context(), c.Query("live") == "true", pg.Page, pg.Limit)
+	var live *bool // ?live=true: only live channels, ?live=false: only offline ones
+	if v, err := strconv.ParseBool(c.Query("live")); err == nil {
+		live = &v
+	}
+	items, total, err := ctl.channels.ListPublic(c.Request.Context(), live, pg.Page, pg.Limit)
 	if err != nil {
 		handleError(c, err)
 		return

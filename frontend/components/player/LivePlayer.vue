@@ -13,12 +13,15 @@ const props = defineProps<{
 }>()
 
 const MODE_KEY = 'playback-mode'
+const SOUND_KEY = 'player-sound'
 
 const video = ref<HTMLVideoElement | null>(null)
 const mode = ref<Mode>('hls')
 const state = ref<State>(props.live ? 'connecting' : 'offline')
 const muted = ref(true)
 const hint = ref('')
+// The muted value we set ourselves, to tell our changes from the viewer's.
+let expectedMuted = true
 
 let current: { stop: () => void } | null = null
 let starting = false
@@ -30,6 +33,51 @@ const overlayText = computed(() => ({
   error: 'Couldn\'t play the stream in this browser.',
   playing: '',
 })[state.value])
+
+function soundPreferred() {
+  try {
+    return localStorage.getItem(SOUND_KEY) !== 'off'
+  }
+  catch {
+    return true
+  }
+}
+
+function setMuted(v: HTMLVideoElement, value: boolean) {
+  expectedMuted = value
+  v.muted = value
+}
+
+// Play with sound when the browser allows it and the viewer hasn't muted
+// before. If the browser blocks sound (no click on this site yet), start
+// muted and show "Tap to unmute" instead.
+async function playBest(v: HTMLVideoElement) {
+  setMuted(v, !soundPreferred())
+  try {
+    await v.play()
+  }
+  catch (err) {
+    if (v.muted || (err as DOMException).name !== 'NotAllowedError') return
+    setMuted(v, true)
+    v.play().catch(() => {})
+  }
+  finally {
+    muted.value = v.muted
+  }
+}
+
+function onVolumeChange(event: Event) {
+  const v = event.target as HTMLVideoElement
+  muted.value = v.muted
+  // Remember the viewer's own mute/unmute (not ours) for next time.
+  if (v.muted !== expectedMuted) {
+    expectedMuted = v.muted
+    try {
+      localStorage.setItem(SOUND_KEY, v.muted ? 'off' : 'on')
+    }
+    catch {}
+  }
+}
 
 function resetVideo() {
   const v = video.value
@@ -66,13 +114,13 @@ async function playHLS(url: string) {
     })
     hls.loadSource(url)
     hls.attachMedia(v)
-    v.play().catch(() => {})
+    playBest(v)
     return { stop: () => { hls.destroy(); resetVideo() } }
   }
   // Safari plays HLS natively.
   if (v.canPlayType('application/vnd.apple.mpegurl')) {
     v.src = url
-    v.play().catch(() => {})
+    playBest(v)
     return { stop: resetVideo }
   }
   throw new Error('HLS is not supported in this browser')
@@ -139,7 +187,7 @@ async function playWebRTC(url: string) {
     }
   })
   v.srcObject = stream
-  v.play().catch(() => {})
+  playBest(v)
 
   // WebRTC can't carry AAC, which OBS sends over RTMP, so check that
   // audio actually arrives.
@@ -200,7 +248,7 @@ function setMode(next: Mode) {
 function unmute() {
   const v = video.value
   if (!v) return
-  v.muted = false
+  v.muted = false // a click: always allowed, and remembered by onVolumeChange
   v.play().catch(() => {})
 }
 
@@ -233,16 +281,14 @@ onBeforeUnmount(() => {
 <template>
   <div>
     <div class="relative aspect-video overflow-hidden rounded-xl bg-black" :class="{ 'rounded-none': compact }">
-      <!-- Starts muted: browsers block autoplay with sound. -->
+      <!-- Sound is decided in playBest(): on if the browser allows it. -->
       <video
         ref="video"
         class="size-full"
         playsinline
-        autoplay
-        muted
         controls
         @playing="state = 'playing'"
-        @volumechange="muted = ($event.target as HTMLVideoElement).muted"
+        @volumechange="onVolumeChange"
       />
       <div
         v-if="state !== 'playing'"

@@ -2,10 +2,10 @@ import type { ApiResponse, PaginatedResponse } from '~/types/api'
 import type { Channel, CreateChannelRequest, OwnChannel, StreamKeyResult, UpdateChannelRequest } from '~/types/channel'
 
 export const channelService = {
-  // Public
+  // Public. live: true = only live channels, false = only offline ones.
   list(params: { live?: boolean, page?: number, limit?: number } = {}) {
     return useApi()<PaginatedResponse<Channel>>('/channels', {
-      query: { live: params.live ? 'true' : undefined, page: params.page, limit: params.limit },
+      query: { live: params.live === undefined ? undefined : String(params.live), page: params.page, limit: params.limit },
     })
   },
   get(slug: string) {

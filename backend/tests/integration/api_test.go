@@ -252,6 +252,10 @@ func TestRealtimeViewersStatusAndChat(t *testing.T) {
 	if !strings.Contains(liveList.Raw, `"slug":"`+slug+`"`) {
 		t.Fatalf("live list missing channel: %s", liveList.Raw)
 	}
+	offlineList := newClient(t).do("GET", "/api/v1/channels?live=false&limit=100", nil).expect(t, http.StatusOK)
+	if strings.Contains(offlineList.Raw, `"slug":"`+slug+`"`) {
+		t.Fatalf("live channel also listed as offline: %s", offlineList.Raw)
+	}
 
 	// Chat messages are pushed to everyone in the room.
 	viewer, _ := register(t)

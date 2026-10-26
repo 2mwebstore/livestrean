@@ -49,11 +49,15 @@ var errChannelNotFound = notFound("Channel not found")
 
 // --- Public -----------------------------------------------------------------
 
-func (s *ChannelService) ListPublic(ctx context.Context, liveOnly bool, page, limit int) ([]dto.ChannelResponse, int64, error) {
+// ListPublic lists active channels. live: nil = all, true = only live ones,
+// false = only those not live right now.
+func (s *ChannelService) ListPublic(ctx context.Context, live *bool, page, limit int) ([]dto.ChannelResponse, int64, error) {
 	f := repositories.ChannelFilter{PublicOnly: true, Page: page, Limit: limit}
-	if liveOnly {
+	if live != nil && *live {
 		f.FilterSlugs = true
 		f.Slugs = s.live.LiveSlugs()
+	} else if live != nil {
+		f.ExcludeSlugs = s.live.LiveSlugs()
 	}
 	list, total, err := s.channels.List(ctx, f)
 	if err != nil {

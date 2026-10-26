@@ -16,8 +16,10 @@ type ChannelFilter struct {
 	// When FilterSlugs is set, only channels in Slugs are returned.
 	FilterSlugs bool
 	Slugs       []string
-	Page        int
-	Limit       int
+	// Channels to leave out, e.g. the ones that are live right now.
+	ExcludeSlugs []string
+	Page         int
+	Limit        int
 }
 
 type ChannelRepository interface {
@@ -80,6 +82,9 @@ func (r *channelRepository) List(ctx context.Context, f ChannelFilter) ([]models
 	}
 	if f.FilterSlugs {
 		q = q.Where("channels.slug IN ?", f.Slugs)
+	}
+	if len(f.ExcludeSlugs) > 0 {
+		q = q.Where("channels.slug NOT IN ?", f.ExcludeSlugs)
 	}
 	if f.Query != "" {
 		like := containsPattern(f.Query)

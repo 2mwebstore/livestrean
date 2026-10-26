@@ -41,7 +41,7 @@ mirrored in `frontend/types/auth.ts`.
 
 | Method | Path | Access | Notes |
 |---|---|---|---|
-| GET | `/channels?live=true&page=&limit=` | public | Active channels, most recently live first |
+| GET | `/channels?live=&page=&limit=` | public | Active channels, most recently live first. `live=true`: only live; `live=false`: only offline |
 | GET | `/channels/:slug` | public | `{slug, title, description, owner{id,name}, live, live_started_at, viewers, last_live_at, hls_url, whep_url}` |
 | GET | `/channels/:slug/comments?before_id=&limit=` | public | Oldest first, up to 100 |
 | POST | `/channels/:slug/comments` | `comments.create`, 3 burst then 1/s per user | `{body}`, 1–500 chars, one line |

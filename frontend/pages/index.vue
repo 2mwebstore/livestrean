@@ -16,16 +16,23 @@ const {
   refresh: refreshLive,
 } = await useAsyncData('channels:live', () => channelService.list({ live: true, limit: 24 }))
 
+// Channels that aren't live, so a live channel isn't shown twice.
 const {
   data: allData,
   status: allStatus,
   error: allError,
   refresh: refreshAll,
-} = await useAsyncData('channels:all', () => channelService.list({ page: page.value, limit: 12 }), { watch: [page] })
+} = await useAsyncData('channels:offline', () => channelService.list({ live: false, page: page.value, limit: 12 }), { watch: [page] })
 
-// Keep "Live now" fresh while the page is open.
+const anyLive = computed(() => (liveData.value?.data.length ?? 0) > 0)
+const showOthers = computed(() => allStatus.value === 'pending' || !!allError.value || (allData.value?.meta.total ?? 0) > 0 || !anyLive.value)
+
+// Keep both lists fresh while the page is open: channels move between them.
 useIntervalFn(() => {
-  if (document.visibilityState === 'visible') refreshLive()
+  if (document.visibilityState === 'visible') {
+    refreshLive()
+    refreshAll()
+  }
 }, 20_000)
 
 function goToPage(p: number) {
@@ -55,9 +62,9 @@ function goToPage(p: number) {
       </div>
     </section>
 
-    <section aria-labelledby="all-heading">
+    <section v-if="showOthers" aria-labelledby="all-heading">
       <h2 id="all-heading" class="text-xl font-semibold">
-        All channels
+        {{ anyLive ? 'Other channels' : 'All channels' }}
       </h2>
       <div class="mt-4 space-y-6">
         <ErrorState v-if="allError" :message="apiErrorMessage(allError)" @retry="refreshAll()" />
