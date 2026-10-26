@@ -6,6 +6,7 @@ logLevel: info
 # Every publish/read attempt is checked by the backend: stream keys are
 # per channel and stored (hashed) in the database.
 authMethod: http
+# Override with MTX_AUTHHTTPADDRESS when the backend has another hostname.
 authHTTPAddress: http://backend:8081/mediamtx/auth
 authHTTPExclude:
   - action: api
@@ -30,13 +31,13 @@ hls: true
 hlsAddress: :8888
 hlsVariant: lowLatency
 hlsAlwaysRemux: true
-hlsTrustedProxies: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+hlsTrustedProxies: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fd00::/8"]
 
 webrtc: true
 webrtcAddress: :8889
 webrtcLocalUDPAddress: :8189
 webrtcLocalTCPAddress: :8189
-webrtcTrustedProxies: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+webrtcTrustedProxies: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fd00::/8"]
 # webrtcAdditionalHosts is set from PUBLIC_HOST in docker-compose.yml.
 
 paths:

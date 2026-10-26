@@ -111,7 +111,7 @@ func Load() (*Config, error) {
 			Password: os.Getenv("DB_PASSWORD"),
 		},
 		SessionCookie:   env("SESSION_COOKIE", "ls_session"),
-		TrustedProxies:  splitList(env("TRUSTED_PROXIES", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1/32")),
+		TrustedProxies:  splitList(env("TRUSTED_PROXIES", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,fd00::/8,127.0.0.1/32")),
 		MediaMTXAPI:     env("MEDIAMTX_API", "http://localhost:9997"),
 		PublicRTMPURL:   strings.TrimRight(env("PUBLIC_RTMP_URL", "rtmp://localhost/live"), "/"),
 		PublicWebRTCURL: strings.TrimRight(env("PUBLIC_WEBRTC_URL", appURL), "/"),

@@ -3,7 +3,7 @@ name: livestream
 services:
   # Single public entry point (see caddy/Caddyfile).
   caddy:
-    image: caddy:2.10-alpine
+    build: ./caddy
     restart: unless-stopped
     depends_on: [frontend, backend, mediamtx]
     environment:
@@ -12,7 +12,6 @@ services:
       - "${HTTP_PORT:-8080}:80"
       - "${HTTPS_PORT:-8443}:443"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
 
@@ -64,14 +63,12 @@ services:
 
   # Media server: receives OBS streams, serves HLS/WebRTC.
   mediamtx:
-    image: bluenviron/mediamtx:1.21.2
+    build: ./mediamtx
     restart: unless-stopped
     depends_on: [backend]
     environment:
       # Addresses viewers use to reach this machine over WebRTC.
       MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_HOST:-127.0.0.1}
-    volumes:
-      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
     ports:
       - "1935:1935"      # RTMP from OBS
       - "8189:8189/udp"  # WebRTC media

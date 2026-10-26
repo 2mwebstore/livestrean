@@ -4,6 +4,7 @@
 #   Stream Key = <slug>?user=obs&pass=<stream key>
 #
 # Usage: ./scripts/test-stream.sh <channel-slug> <stream-key>
+#        RTMP_URL=rtmp://host:port/live ./scripts/test-stream.sh ...   (another server)
 set -euo pipefail
 
 if [ $# -ne 2 ]; then
@@ -12,6 +13,7 @@ if [ $# -ne 2 ]; then
 fi
 SLUG="$1"
 KEY="$2"
+RTMP_URL="${RTMP_URL:-rtmp://host.docker.internal:1935/live}"
 
 echo "Streaming test pattern to channel '$SLUG' (Ctrl+C to stop)"
 exec docker run --rm --init --add-host=host.docker.internal:host-gateway \
@@ -21,5 +23,5 @@ exec docker run --rm --init --add-host=host.docker.internal:host-gateway \
   -f lavfi -i "sine=frequency=440:sample_rate=48000" \
   -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g 30 -b:v 2500k \
   -c:a aac -b:a 128k \
-  -f flv -rtmp_app live -rtmp_playpath "${SLUG}?user=obs&pass=${KEY}" \
-  "rtmp://host.docker.internal:1935/live"
+  -f flv -rtmp_app "${RTMP_URL##*/}" -rtmp_playpath "${SLUG}?user=obs&pass=${KEY}" \
+  "$RTMP_URL"
