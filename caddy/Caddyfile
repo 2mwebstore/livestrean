@@ -21,12 +21,18 @@
 	# WebRTC signalling: OBS WHIP publish and browser WHEP playback
 	@webrtc path_regexp ^/live/[^/]+/(whip|whep)(/.*)?$
 	handle @webrtc {
-		reverse_proxy {$MEDIAMTX_WEBRTC_UPSTREAM:mediamtx:8889}
+		reverse_proxy {$MEDIAMTX_WEBRTC_UPSTREAM:mediamtx:8889} {
+			# Give MediaMTX the viewer's real IP (for its logs and session checks).
+			header_up X-Forwarded-For {client_ip}
+		}
 	}
 
 	# HLS playlists and segments
 	handle /live/* {
-		reverse_proxy {$MEDIAMTX_HLS_UPSTREAM:mediamtx:8888}
+		reverse_proxy {$MEDIAMTX_HLS_UPSTREAM:mediamtx:8888} {
+			# MediaMTX ties HLS sessions to the viewer's IP, so send the real one.
+			header_up X-Forwarded-For {client_ip}
+		}
 	}
 
 	handle /api/* {
