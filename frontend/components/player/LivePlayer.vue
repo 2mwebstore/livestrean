@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LoaderCircleIcon, RadioIcon, VolumeXIcon } from '@lucide/vue'
+import { LoaderCircleIcon, MaximizeIcon, MinimizeIcon, RadioIcon, Volume2Icon, VolumeXIcon } from '@lucide/vue'
 
 type Mode = 'hls' | 'webrtc'
 type State = 'offline' | 'connecting' | 'playing' | 'error'
@@ -12,6 +12,8 @@ const props = defineProps<{
   compact?: boolean
   /** Image shown behind the offline message (the channel thumbnail). */
   poster?: string | null
+  /** Shown next to the LIVE label on the video (used by the embed). */
+  viewers?: number | null
 }>()
 // #offline: replaces the offline message, e.g. with a countdown.
 defineSlots<{ offline?: () => unknown }>()
@@ -54,7 +56,7 @@ function setMuted(v: HTMLVideoElement, value: boolean) {
 
 // Play with sound when the browser allows it and the viewer hasn't muted
 // before. If the browser blocks sound (no click on this site yet), start
-// muted and show "Tap to unmute" instead.
+// muted; the LIVE label then shows a muted speaker and a tap turns sound on.
 async function playBest(v: HTMLVideoElement) {
   setMuted(v, !soundPreferred())
   try {
@@ -249,11 +251,68 @@ function setMode(next: Mode) {
   if (props.live) start()
 }
 
-function unmute() {
+// --- Controls: tap the video to mute/unmute; LIVE label when idle ----------
+
+const container = ref<HTMLElement | null>(null)
+const hovering = ref(false) // mouse over the video
+const tapped = ref(false) // recently clicked/tapped
+const fullscreen = ref(false)
+// Brief icon in the middle of the video after a tap.
+const feedback = ref<'muted' | 'unmuted' | null>(null)
+let tapTimer: ReturnType<typeof setTimeout> | undefined
+let feedbackTimer: ReturnType<typeof setTimeout> | undefined
+
+// While the viewer interacts, the LIVE label hides and the fullscreen
+// button shows; otherwise the other way round.
+const interacting = computed(() => hovering.value || tapped.value)
+
+function onPointerEnter(event: PointerEvent) {
+  if (event.pointerType === 'mouse') hovering.value = true
+}
+
+function onPointerLeave() {
+  hovering.value = false
+}
+
+function markTapped() {
+  tapped.value = true
+  clearTimeout(tapTimer)
+  tapTimer = setTimeout(() => (tapped.value = false), 2500)
+}
+
+// Runs inside the click, so browsers allow turning the sound on.
+function toggleMute() {
   const v = video.value
   if (!v) return
-  v.muted = false // a click: always allowed, and remembered by onVolumeChange
-  v.play().catch(() => {})
+  markTapped()
+  v.muted = !v.muted // remembered by onVolumeChange
+  if (!v.muted) v.play().catch(() => {})
+  feedback.value = v.muted ? 'muted' : 'unmuted'
+  clearTimeout(feedbackTimer)
+  feedbackTimer = setTimeout(() => (feedback.value = null), 700)
+}
+
+function toggleFullscreen() {
+  markTapped()
+  const v = video.value as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {})
+  }
+  else if (container.value?.requestFullscreen) {
+    container.value.requestFullscreen().catch(() => {})
+  }
+  else {
+    v?.webkitEnterFullscreen?.() // iPhone: only the video itself can go fullscreen
+  }
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'f') toggleFullscreen()
+  else if (event.key === 'm') toggleMute()
+}
+
+function onFullscreenChange() {
+  fullscreen.value = document.fullscreenElement === container.value
 }
 
 watch(() => props.live, (live) => {
@@ -269,6 +328,7 @@ watch(() => props.live, (live) => {
 })
 
 onMounted(() => {
+  document.addEventListener('fullscreenchange', onFullscreenChange)
   try {
     if (localStorage.getItem(MODE_KEY) === 'webrtc') mode.value = 'webrtc'
   }
@@ -277,6 +337,9 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  clearTimeout(tapTimer)
+  clearTimeout(feedbackTimer)
   clearTimeout(retryTimer)
   stop()
 })
@@ -284,13 +347,19 @@ onBeforeUnmount(() => {
 
 <template>
   <div>
-    <div class="relative aspect-video overflow-hidden rounded-xl bg-black" :class="{ 'rounded-none': compact }">
-      <!-- Sound is decided in playBest(): on if the browser allows it. -->
+    <div
+      ref="container"
+      class="relative aspect-video overflow-hidden rounded-xl bg-black select-none"
+      :class="{ 'rounded-none': compact || fullscreen }"
+      @pointerenter="onPointerEnter"
+      @pointerleave="onPointerLeave"
+    >
+      <!-- No browser controls: a tap on the video mutes/unmutes instead.
+           Sound is decided in playBest(): on if the browser allows it. -->
       <video
         ref="video"
         class="size-full"
         playsinline
-        controls
         @playing="state = 'playing'"
         @volumechange="onVolumeChange"
       />
@@ -313,15 +382,57 @@ onBeforeUnmount(() => {
           </template>
         </div>
       </div>
-      <button
-        v-if="state === 'playing' && muted"
-        type="button"
-        class="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-md bg-black/70 px-3 py-2 text-sm font-semibold text-white hover:bg-black/80"
-        @click="unmute"
-      >
-        <VolumeXIcon class="size-4" />
-        Tap to unmute
-      </button>
+      <template v-if="state === 'playing'">
+        <!-- The whole video is the mute/unmute button. -->
+        <button
+          type="button"
+          class="absolute inset-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none focus-visible:ring-inset"
+          :aria-label="muted ? 'Unmute (M). Fullscreen: F' : 'Mute (M). Fullscreen: F'"
+          @click="toggleMute"
+          @keydown="onKeydown"
+        />
+
+        <!-- LIVE label: shown while idle, hidden while hovering or just after a tap. -->
+        <div
+          class="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 transition-opacity duration-200"
+          :class="interacting ? 'opacity-0' : 'opacity-100'"
+          aria-hidden="true"
+        >
+          <span class="inline-flex items-center gap-1.5 rounded-md bg-live px-2 py-1 text-xs font-bold tracking-wider text-white uppercase shadow">
+            <span class="size-1.5 animate-pulse rounded-full bg-white" />
+            Live
+            <VolumeXIcon v-if="muted" class="size-3.5" />
+          </span>
+          <span v-if="viewers != null" class="rounded-md bg-black/70 px-1.5 py-0.5 text-xs text-white">
+            <ViewerCount :count="viewers" />
+          </span>
+        </div>
+
+        <!-- Brief confirmation in the middle after a tap. -->
+        <div
+          class="pointer-events-none absolute inset-0 grid place-items-center transition-opacity duration-300"
+          :class="feedback ? 'opacity-100' : 'opacity-0'"
+          aria-hidden="true"
+        >
+          <span class="grid size-16 place-items-center rounded-full bg-black/60 text-white">
+            <VolumeXIcon v-if="feedback === 'muted'" class="size-7" />
+            <Volume2Icon v-else class="size-7" />
+          </span>
+        </div>
+
+        <button
+          type="button"
+          class="absolute right-3 bottom-3 grid size-9 place-items-center rounded-md bg-black/60 text-white transition-opacity duration-200 hover:bg-black/80 focus-visible:opacity-100"
+          :class="interacting ? 'opacity-100' : 'pointer-events-none opacity-0'"
+          :aria-label="fullscreen ? 'Exit fullscreen' : 'Fullscreen'"
+          @click.stop="toggleFullscreen"
+        >
+          <MinimizeIcon v-if="fullscreen" class="size-4" />
+          <MaximizeIcon v-else class="size-4" />
+        </button>
+      </template>
+      <!-- Mute state for screen readers -->
+      <span class="sr-only" aria-live="polite">{{ state === 'playing' ? (muted ? 'Sound off' : 'Sound on') : '' }}</span>
     </div>
 
     <div v-if="!compact" class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">

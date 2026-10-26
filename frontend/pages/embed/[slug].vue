@@ -26,18 +26,12 @@ useHead({
 
 <template>
   <div v-if="channel" class="relative">
-    <LivePlayer :hls-url="channel.hls_url" :whep-url="channel.whep_url" :live="live" :poster="channel.thumbnail_url" compact>
+    <LivePlayer :hls-url="channel.hls_url" :whep-url="channel.whep_url" :live="live" :poster="channel.thumbnail_url" :viewers="live ? viewers : null" compact>
       <template v-if="countdownAt" #offline>
         <CountdownTimer :at="countdownAt" compact />
       </template>
     </LivePlayer>
-    <div class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2">
-      <div class="flex items-center gap-2 text-xs text-white">
-        <LiveBadge :live="live" />
-        <span v-if="live" class="rounded-md bg-black/70 px-1.5 py-0.5">
-          <ViewerCount :count="viewers" />
-        </span>
-      </div>
+    <div class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-end gap-2 p-2">
       <a
         :href="`/c/${slug}`"
         target="_blank"
